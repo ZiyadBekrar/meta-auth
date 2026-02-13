@@ -20,16 +20,15 @@ settings = Settings.from_env()
 app = FastAPI()
 
 
-def _missing_env_error_html(*names: str) -> HTMLResponse:
-    missing = [n for n in names if not os.getenv(n)]
+def _missing_config_error_html(*items: str) -> HTMLResponse:
     return HTMLResponse(
         f"""
         <html>
           <body style="font-family: ui-sans-serif, system-ui; padding: 24px;">
             <h2>Missing configuration</h2>
-            <p>Set these environment variables and restart the server:</p>
-            <pre>{chr(10).join(missing)}</pre>
-            <p>Tip: copy <code>.env.example</code> to <code>.env</code>.</p>
+            <p>Fix these items and restart the server:</p>
+            <pre>{chr(10).join(items)}</pre>
+            <p>Tip: copy <code>.env.example</code> to <code>.env</code> for non-secret config.</p>
           </body>
         </html>
         """.strip(),
@@ -59,7 +58,11 @@ async def meta_auth(request: Request):
     """
 
     if not (settings.meta_app_id and settings.meta_app_secret):
-        return _missing_env_error_html("META_APP_ID", "META_APP_SECRET")
+        return _missing_config_error_html(
+            "Secret Manager access failed for:",
+            "projects/358205627399/secrets/META_APP_ID/versions/latest",
+            "projects/358205627399/secrets/META_APP_SECRET/versions/latest",
+        )
 
     # State is signed (no cookie dependency).
     state = make_signed_state(
@@ -83,7 +86,18 @@ async def meta_auth_callback(
     """
 
     if not (settings.meta_app_id and settings.meta_app_secret and settings.meta_redirect_uri):
-        return _missing_env_error_html("META_APP_ID", "META_APP_SECRET", "META_REDIRECT_URI")
+        missing = []
+        if not settings.meta_redirect_uri:
+            missing.append("META_REDIRECT_URI (env var)")
+        if not (settings.meta_app_id and settings.meta_app_secret):
+            missing.extend(
+                [
+                    "Secret Manager access failed for:",
+                    "projects/358205627399/secrets/META_APP_ID/versions/latest",
+                    "projects/358205627399/secrets/META_APP_SECRET/versions/latest",
+                ]
+            )
+        return _missing_config_error_html(*missing)
 
     if error:
         return HTMLResponse(

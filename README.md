@@ -55,10 +55,13 @@ gcloud run deploy tokenmeta \
 
 2. Set environment variables on the service (at least):
 
-- `META_APP_ID`
-- `META_APP_SECRET`
 - `META_REDIRECT_URI` (must match the Cloud Run URL + `/meta-auth/callback`)
 - `GSM_SECRET_VERSION` (defaults to `projects/358205627399/secrets/META_TEST/versions/latest`)
+
+`META_APP_ID` and `META_APP_SECRET` are read directly from Google Secret Manager at runtime:
+
+- `projects/358205627399/secrets/META_APP_ID/versions/latest`
+- `projects/358205627399/secrets/META_APP_SECRET/versions/latest`
 
 3. Secret Manager permissions (Cloud Run)
 
