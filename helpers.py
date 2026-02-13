@@ -123,7 +123,7 @@ class Settings:
         meta_app_id = None
         meta_app_secret = None
         try:
-            meta_redirect_uri = access_secret_version(
+            meta_redirect_uri = _access_secret_version(
                 client=client,
                 secret_resource_or_version=META_REDIRECT_URI_SECRET_RESOURCE,
                 version="latest",
