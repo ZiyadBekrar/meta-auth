@@ -17,6 +17,7 @@ from google.oauth2 import service_account
  
 META_APP_ID_SECRET_RESOURCE = "projects/358205627399/secrets/META_APP_ID"
 META_APP_SECRET_SECRET_RESOURCE = "projects/358205627399/secrets/META_APP_SECRET"
+META_REDIRECT_URI_SECRET_RESOURCE = "projects/358205627399/secrets/META_REDIRECT_URI"
  
  
 def _b64url_encode(data: bytes) -> str:
@@ -101,7 +102,6 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         meta_api_version = os.getenv("META_API_VERSION", "v24.0")
-        meta_redirect_uri = os.getenv("META_REDIRECT_URI")
         meta_scopes = os.getenv(
             "META_SCOPES",
             "pages_show_list,pages_read_engagement,pages_manage_posts",
@@ -123,6 +123,11 @@ class Settings:
         meta_app_id = None
         meta_app_secret = None
         try:
+            meta_redirect_uri = access_secret_version(
+                client=client,
+                secret_resource_or_version=META_REDIRECT_URI_SECRET_RESOURCE,
+                version="latest",
+            )
             meta_app_id = _access_secret_version(
                 client=client,
                 secret_resource_or_version=META_APP_ID_SECRET_RESOURCE,
