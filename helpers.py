@@ -109,7 +109,7 @@ class Settings:
  
         gsm_secret_version = os.getenv(
             "GSM_SECRET_VERSION",
-            "projects/358205627399/secrets/META_TEST/versions/latest",
+            "projects/358205627399/secrets/META_PAGE_ACCESS_TOKEN/versions/latest",
         )
         gcp_service_account_file = os.getenv("GCP_SERVICE_ACCOUNT_FILE") or None
         if not gcp_service_account_file and os.path.exists("credentials.json"):
