@@ -4,7 +4,6 @@ import hmac
 import os
 import secrets
 import time
-import datetime as dt
 from dataclasses import dataclass
 from typing import Optional
 
@@ -48,12 +47,6 @@ class Settings:
     gsm_secret_version: str
     gcp_service_account_file: str
 
-    # Email alerting
-    SMTP_USER: str
-    SMTP_FROM: str
-    SMTP_PASSWORD: Optional[str]
-    alert_days_before_expiry: int
-
     @staticmethod
     def from_env() -> "Settings":
         return Settings(
@@ -73,10 +66,6 @@ class Settings:
                 "GCP_SERVICE_ACCOUNT_FILE",
                 "/Users/stratimpulse1/Documents/tokenmeta/credentials.json",
             ),
-            SMTP_USER="ziyad94240@gmail.com",
-            SMTP_FROM="ziyad94240@gmail.com",
-            SMTP_PASSWORD=os.getenv("SMTP_PASSWORD"),
-            alert_days_before_expiry=3,
         )
 
 
@@ -106,7 +95,6 @@ def make_signed_state(app_secret: str, ttl_seconds: int = 600) -> str:
         hashlib.sha256,
     ).digest()
 
-    # ttl_seconds is enforced in verify_signed_state; included here for API symmetry.
     _ = ttl_seconds
     return f"{_b64url_encode(payload)}.{_b64url_encode(sig)}"
 
@@ -148,10 +136,10 @@ def build_meta_oauth_dialog_url(settings: Settings, state: str) -> str:
 
 async def exchange_code_for_long_lived_user_access_token(
     settings: Settings, *, code: str
-) -> tuple[str, Optional[int]]:
+) -> str:
     """
     code -> short-lived token -> long-lived token
-    Returns (long_lived_access_token, expires_in_seconds). Raises ValueError on failure.
+    Returns the long-lived access token (string). Raises ValueError on failure.
     """
 
     import httpx
@@ -196,55 +184,7 @@ async def exchange_code_for_long_lived_user_access_token(
         if not long_access_token:
             raise ValueError("Long-lived exchange returned no access token")
 
-    expires_in = long_data.get("expires_in")
-    expires_in_int: Optional[int]
-    try:
-        expires_in_int = int(expires_in) if expires_in is not None else None
-    except Exception:
-        expires_in_int = None
-
-    return long_access_token, expires_in_int
-
-
-def compute_expires_at_utc(expires_in_seconds: Optional[int]) -> Optional[dt.datetime]:
-    if not expires_in_seconds:
-        return None
-    return dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=expires_in_seconds)
-
-
-def compute_alert_time_utc(
-    *, expires_at_utc: dt.datetime, days_before: int
-) -> dt.datetime:
-    return expires_at_utc - dt.timedelta(days=days_before)
-
-
-def send_gmail_smtp_email(
-    *,
-    gmail_from: str,
-    gmail_app_password: str,
-    to_email: str,
-    subject: str,
-    body: str,
-) -> None:
-    """
-    Send an email using Gmail SMTP + App Password.
-    (Requires 2FA + an App Password on the Gmail account.)
-    """
-    from email.message import EmailMessage
-    import smtplib
-
-    msg = EmailMessage()
-    msg["From"] = gmail_from
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.set_content(body)
-
-    with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
-        s.ehlo()
-        s.starttls()
-        s.ehlo()
-        s.login(gmail_from, gmail_app_password)
-        s.send_message(msg)
+    return long_access_token
 
 
 def _secret_parent_from_version_name(version_name: str) -> str:
