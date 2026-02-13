@@ -64,7 +64,7 @@ class Settings:
             ),
             gcp_service_account_file=os.getenv(
                 "GCP_SERVICE_ACCOUNT_FILE",
-                "/Users/stratimpulse1/Documents/tokenmeta/credentials.json",
+                "",
             ),
         )
 
@@ -217,15 +217,21 @@ def upload_to_google_secret_manager_if_changed(
     if not token:
         return (False, "No token to upload.")
 
-    if not service_account_file or not os.path.exists(service_account_file):
-        return (False, f"Service account file not found at {service_account_file}")
+    creds = None
+    if service_account_file:
+        if not os.path.exists(service_account_file):
+            return (False, f"Service account file not found at {service_account_file}")
+        try:
+            creds = service_account.Credentials.from_service_account_file(service_account_file)
+        except Exception as e:
+            return (False, f"Failed to load service account credentials: {type(e).__name__}")
 
-    try:
-        creds = service_account.Credentials.from_service_account_file(service_account_file)
-    except Exception as e:
-        return (False, f"Failed to load service account credentials: {type(e).__name__}")
-
-    client = secretmanager.SecretManagerServiceClient(credentials=creds)
+    # If creds is None, fall back to Application Default Credentials (Cloud Run service account).
+    client = (
+        secretmanager.SecretManagerServiceClient(credentials=creds)
+        if creds is not None
+        else secretmanager.SecretManagerServiceClient()
+    )
 
     current_value: Optional[str] = None
     try:

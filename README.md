@@ -42,4 +42,31 @@ This app uses a **service account JSON** to write to Secret Manager.
 - Set `GCP_SERVICE_ACCOUNT_FILE` (default is `./credentials.json`)
 - Ensure the service account has permission to `accessSecretVersion` and `addSecretVersion` on the target secret.
 
+## Deploy to Cloud Run
+
+1. Build and deploy:
+
+```bash
+gcloud run deploy tokenmeta \
+  --source . \
+  --region YOUR_REGION \
+  --allow-unauthenticated
+```
+
+2. Set environment variables on the service (at least):
+
+- `META_APP_ID`
+- `META_APP_SECRET`
+- `META_REDIRECT_URI` (must match the Cloud Run URL + `/meta-auth/callback`)
+- `GSM_SECRET_VERSION` (defaults to `projects/358205627399/secrets/META_TEST/versions/latest`)
+
+3. Secret Manager permissions (Cloud Run)
+
+In Cloud Run, **do not ship `credentials.json`**. Instead, attach a Cloud Run service account that has:
+
+- `secretmanager.versions.access`
+- `secretmanager.versions.add`
+
+The app will use **Application Default Credentials** automatically when `GCP_SERVICE_ACCOUNT_FILE` is not set.
+
 
