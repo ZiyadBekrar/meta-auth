@@ -133,7 +133,7 @@ async def meta_auth_callback(
         )
 
     try:
-        long_access_token, expires_in = await exchange_code_for_long_lived_user_access_token(
+        long_access_token = await exchange_code_for_long_lived_user_access_token(
             settings, code=code
         )
     except ValueError as e:

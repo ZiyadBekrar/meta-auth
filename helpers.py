@@ -50,13 +50,13 @@ class Settings:
     @staticmethod
     def from_env() -> "Settings":
         return Settings(
-            meta_api_version=os.getenv("META_API_VERSION", "v24.0"),
+            meta_api_version="v24.0",
             meta_app_id=os.getenv("META_APP_ID"),
             meta_app_secret=os.getenv("META_APP_SECRET"),
             meta_redirect_uri=os.getenv(
                 "META_REDIRECT_URI", "http://localhost:8000/meta-auth/callback"
             ),
-            meta_scopes=os.getenv("META_SCOPES", "business_management"),
+            meta_scopes="pages_show_list,pages_read_engagement,pages_manage_posts",
             state_ttl_seconds=int(os.getenv("STATE_TTL_SECONDS", "600")),
             gsm_secret_version=os.getenv(
                 "GSM_SECRET_VERSION",
