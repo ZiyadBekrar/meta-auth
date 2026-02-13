@@ -1,0 +1,4 @@
+fastapi
+uvicorn[standard]
+httpx
+google-cloud-secret-manager
