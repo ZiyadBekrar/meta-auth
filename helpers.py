@@ -125,9 +125,14 @@ class Settings:
  
         state_ttl_seconds = int(os.getenv("STATE_TTL_SECONDS", "600"))
  
-        google_client_id = os.getenv("GOOGLE_CLIENT_ID") or None
-        google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or None
-        google_scopes = "openid email profile"
+        oauth_client_id = os.getenv("OAUTH_CLIENT_ID",
+                                    "projects/358205627399/secrets/OAUTH_CLIENT_ID/versions/latest",
+        )
+        oauth_client_secret = os.getenv("OAUTH_CLIENT_SECRET",
+                                        "projects/358205627399/secrets/OAUTH_CLIENT_SECRET/versions/latest",
+        )
+
+        oauth_scopes = "openid email profile"
 
         allowed_emails_raw =  "ziyad.bekrar@student-cs.fr"
         allowed_domains_raw =  ""
@@ -173,9 +178,9 @@ class Settings:
             gsm_secret_version=gsm_secret_version,
             gcp_service_account_file=gcp_service_account_file,
             state_ttl_seconds=state_ttl_seconds,
-            google_client_id=google_client_id,
-            google_client_secret=google_client_secret,
-            google_scopes=google_scopes,
+            google_client_id=oauth_client_id,
+            google_client_secret=oauth_client_secret,
+            google_scopes=oauth_scopes,
             allowed_emails=allowed_emails,
             allowed_domains=allowed_domains,
             session_secret_key=session_secret_key,
