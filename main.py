@@ -84,7 +84,7 @@ async def require_google_login(request: Request, call_next):
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key,
-    https_only=False,  # allow http://localhost; set to True behind HTTPS if desired
+    https_only=True,  
     same_site="lax",
 )
 
