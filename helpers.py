@@ -127,10 +127,10 @@ class Settings:
  
         google_client_id = os.getenv("GOOGLE_CLIENT_ID") or None
         google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or None
-        google_scopes = os.getenv("GOOGLE_SCOPES", "openid email profile")
+        google_scopes = "openid email profile"
 
-        allowed_emails_raw = os.getenv("ALLOWED_EMAILS", "")
-        allowed_domains_raw = os.getenv("ALLOWED_GOOGLE_DOMAINS", "")
+        allowed_emails_raw =  "ziyad.bekrar@student-cs.fr"
+        allowed_domains_raw =  ""
         allowed_emails = {e.strip().lower() for e in allowed_emails_raw.split(",") if e.strip()}
         allowed_domains = {d.strip().lower() for d in allowed_domains_raw.split(",") if d.strip()}
 
