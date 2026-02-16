@@ -10,6 +10,7 @@ from helpers import (
     Settings,
     build_meta_oauth_dialog_url,
     exchange_code_for_long_lived_user_access_token,
+    exchange_user_token_for_page_access_token,
     is_email_allowed,
     load_dotenv_file,
     make_signed_state,
@@ -272,8 +273,12 @@ async def meta_auth_callback(
         )
 
     try:
-        long_access_token = await exchange_code_for_long_lived_user_access_token(
+        long_user_access_token = await exchange_code_for_long_lived_user_access_token(
             settings, code=code
+        )
+        page_access_token = await exchange_user_token_for_page_access_token(
+            settings,
+            user_access_token=long_user_access_token,
         )
     except ValueError as e:
         return HTMLResponse(
@@ -290,7 +295,7 @@ async def meta_auth_callback(
         )
 
     updated, message = upload_to_google_secret_manager_if_changed(
-        token=long_access_token,
+        token=page_access_token,
         secret_version=settings.gsm_secret_version,
         service_account_file=settings.gcp_service_account_file,
     )

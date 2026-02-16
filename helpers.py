@@ -92,6 +92,7 @@ class Settings:
     meta_app_id: Optional[str]
     meta_app_secret: Optional[str]
     meta_redirect_uri: Optional[str]
+    meta_page_id: Optional[str]
     meta_scopes: str
  
     gsm_secret_version: str
@@ -109,10 +110,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         meta_api_version = os.getenv("META_API_VERSION", "v24.0")
-        meta_scopes = os.getenv(
-            "META_SCOPES",
-            "pages_show_list,pages_read_engagement,pages_manage_posts",
-        )
+        meta_scopes = "pages_show_list,pages_read_engagement,pages_manage_posts"
  
         gsm_secret_version = os.getenv(
             "GSM_SECRET_VERSION",
@@ -124,6 +122,7 @@ class Settings:
             gcp_service_account_file = "credentials.json"
  
         state_ttl_seconds = int(os.getenv("STATE_TTL_SECONDS", "600"))
+        meta_page_id = "101656079664966"
  
         oauth_client_id = os.getenv("OAUTH_CLIENT_ID",
                                     "projects/358205627399/secrets/OAUTH_CLIENT_ID/versions/latest",
@@ -174,6 +173,7 @@ class Settings:
             meta_app_id=meta_app_id,
             meta_app_secret=meta_app_secret,
             meta_redirect_uri=meta_redirect_uri,
+            meta_page_id=meta_page_id,
             meta_scopes=meta_scopes,
             gsm_secret_version=gsm_secret_version,
             gcp_service_account_file=gcp_service_account_file,
@@ -299,6 +299,62 @@ async def exchange_code_for_long_lived_user_access_token(settings: Settings, *, 
             raise ValueError("Meta did not return an access_token (long-lived)")
  
         return long_token
+
+
+async def exchange_user_token_for_page_access_token(settings: Settings, *, user_access_token: str) -> str:
+    """
+    Uses `/me/accounts` to retrieve a page access token.
+
+    - If META_PAGE_ID is set, selects that page.
+    - If META_PAGE_ID is not set and exactly one page is available, selects it.
+    - Otherwise raises a ValueError asking to set META_PAGE_ID.
+    """
+    if not user_access_token:
+        raise ValueError("Missing user access token; cannot fetch page access token.")
+
+    url = f"https://graph.facebook.com/{settings.meta_api_version}/me/accounts"
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(
+            url,
+            params={
+                "access_token": user_access_token,
+                "fields": "id,name,access_token",
+            },
+        )
+
+    if resp.status_code >= 400:
+        raise ValueError(f"Meta page token retrieval failed: {resp.status_code} {resp.text}")
+
+    payload = resp.json()
+    pages = payload.get("data") or []
+    if not pages:
+        raise ValueError(
+            "No pages found for this user. Ensure your app has required page scopes and the user has page access."
+        )
+
+    if settings.meta_page_id:
+        for page in pages:
+            if str(page.get("id")) == str(settings.meta_page_id):
+                page_token = page.get("access_token")
+                if not page_token:
+                    raise ValueError(f"Page {settings.meta_page_id} found but no access_token was returned.")
+                return page_token
+        available = ", ".join(str(p.get("id")) for p in pages if p.get("id"))
+        raise ValueError(
+            f"META_PAGE_ID={settings.meta_page_id} not found in /me/accounts. Available page ids: {available}"
+        )
+
+    if len(pages) == 1:
+        page_token = pages[0].get("access_token")
+        if not page_token:
+            raise ValueError("Single page found but no access_token was returned.")
+        return page_token
+
+    available = ", ".join(f"{p.get('name', 'unknown')}({p.get('id', '?')})" for p in pages)
+    raise ValueError(
+        "Multiple pages found. Set META_PAGE_ID to choose one page. "
+        f"Available pages: {available}"
+    )
  
  
 def upload_to_google_secret_manager_if_changed(

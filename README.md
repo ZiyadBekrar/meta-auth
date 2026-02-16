@@ -5,7 +5,7 @@
 This project exposes a route:
 
 - `GET /meta-auth`: redirects the user to Meta (Facebook) OAuth
-- `GET /meta-auth/callback`: exchanges the returned `code` for a long-lived Meta token and stores it in Google Secret Manager (no token is displayed)
+- `GET /meta-auth/callback`: exchanges the returned `code` for a long-lived user token, derives a **page access token** via `/me/accounts`, and stores that page token in Google Secret Manager (no token is displayed)
 
 ## Setup
 
@@ -64,6 +64,7 @@ gcloud run deploy tokenmeta \
 2. Set environment variables on the service (at least):
 
 - `META_REDIRECT_URI` (must match the Cloud Run URL + `/meta-auth/callback`)
+- `META_PAGE_ID` (recommended when the authenticated user manages multiple pages)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `ALLOWED_EMAILS` and/or `ALLOWED_GOOGLE_DOMAINS`
