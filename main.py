@@ -1,23 +1,92 @@
 import os
+import urllib.parse
 from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from helpers import (
     Settings,
     build_meta_oauth_dialog_url,
     exchange_code_for_long_lived_user_access_token,
+    is_email_allowed,
     load_dotenv_file,
     make_signed_state,
     upload_to_google_secret_manager_if_changed,
     verify_signed_state,
 )
 
+from authlib.integrations.starlette_client import OAuth, OAuthError  # type: ignore[import-not-found]
+
 load_dotenv_file()
 settings = Settings.from_env()
 
 app = FastAPI()
+
+oauth = OAuth()
+oauth.register(
+    name="google",
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_id=settings.google_client_id,
+    client_secret=settings.google_client_secret,
+    client_kwargs={"scope": settings.google_scopes},
+)
+
+
+def _current_user(request: Request) -> Optional[dict]:
+    return (request.session or {}).get("user")
+
+
+def _auth_error_html(message: str, *, status_code: int = 403) -> HTMLResponse:
+    return HTMLResponse(
+        f"""
+        <html>
+          <body style="font-family: ui-sans-serif, system-ui; padding: 24px;">
+            <h2>Access denied</h2>
+            <p>{message}</p>
+            <p><a href="/logout">Sign out</a></p>
+          </body>
+        </html>
+        """.strip(),
+        status_code=status_code,
+    )
+
+
+@app.middleware("http")
+async def require_google_login(request: Request, call_next):
+    public_paths = {"/login", "/auth/callback", "/logout"}
+    if (
+        request.url.path in public_paths
+        or request.url.path in {"/openapi.json", "/redoc"}
+        or request.url.path.startswith("/docs")
+    ):
+        return await call_next(request)
+
+    user = _current_user(request)
+    if not user:
+        next_url = str(request.url)
+        return RedirectResponse(url=f"/login?next={urllib.parse.quote(next_url, safe='')}", status_code=302)
+
+    email = (user.get("email") or "").strip()
+    if not is_email_allowed(settings, email):
+        return _auth_error_html(
+            f"Your Google account ({email or 'unknown'}) is not on the allowlist.",
+            status_code=403,
+        )
+
+    return await call_next(request)
+
+
+# IMPORTANT: SessionMiddleware must wrap the function middleware above.
+# FastAPI inserts function middleware before add_middleware() entries,
+# so we add SessionMiddleware after declaring @app.middleware handlers.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret_key,
+    https_only=False,  # allow http://localhost; set to True behind HTTPS if desired
+    same_site="lax",
+)
 
 
 def _missing_config_error_html(*items: str) -> HTMLResponse:
@@ -37,17 +106,73 @@ def _missing_config_error_html(*items: str) -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def home() -> HTMLResponse:
+async def home(request: Request) -> HTMLResponse:
+    user = _current_user(request) or {}
+    email = (user.get("email") or "").strip()
     return HTMLResponse(
-        """
+        f"""
         <html>
           <body style="font-family: ui-sans-serif, system-ui; padding: 24px;">
             <h2>TokenMeta</h2>
+            <p>Signed in as <b>{email}</b>.</p>
             <p><a href="/meta-auth">Start Meta OAuth</a></p>
+            <p><a href="/logout">Sign out</a></p>
           </body>
         </html>
         """.strip()
     )
+
+
+@app.get("/login")
+async def login(request: Request, next: Optional[str] = None):
+    if not (settings.google_client_id and settings.google_client_secret):
+        return _missing_config_error_html("GOOGLE_CLIENT_ID (env var)", "GOOGLE_CLIENT_SECRET (env var)")
+
+    # Prevent open-redirects: only allow same-host absolute URLs or relative paths.
+    dest = next or "/"
+    try:
+        parsed = urllib.parse.urlparse(dest)
+        if parsed.scheme and parsed.netloc and parsed.netloc != request.url.netloc:
+            dest = "/"
+    except Exception:
+        dest = "/"
+
+    request.session["next"] = dest
+    redirect_uri = str(request.url_for("auth_callback"))
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request):
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        # Authlib may already populate token["userinfo"] when id_token + nonce are present.
+        userinfo = token.get("userinfo")
+        if not userinfo:
+            # Fallback for configurations where id_token is not returned.
+            userinfo = await oauth.google.userinfo(token=token)
+    except OAuthError as e:
+        return _auth_error_html(f"Google OAuth failed: {str(e)}", status_code=400)
+    except Exception as e:
+        return _auth_error_html(f"Google userinfo retrieval failed: {str(e)}", status_code=400)
+
+    email = (userinfo.get("email") or "").strip().lower()
+    if not is_email_allowed(settings, email):
+        return _auth_error_html(f"Your Google account ({email or 'unknown'}) is not on the allowlist.", status_code=403)
+
+    request.session["user"] = {
+        "email": email,
+        "name": userinfo.get("name"),
+        "picture": userinfo.get("picture"),
+    }
+    dest = request.session.pop("next", "/") or "/"
+    return RedirectResponse(url=dest, status_code=302)
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/meta-auth")

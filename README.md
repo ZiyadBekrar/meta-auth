@@ -12,13 +12,21 @@ This project exposes a route:
 1. Create a Meta app and configure **Valid OAuth Redirect URIs** to include:
    - `http://localhost:8000/meta-auth/callback`
 
-2. Create your env file:
+2. Create a Google OAuth client (for app login) and configure:
+
+- **Authorized redirect URI**: `http://localhost:8000/auth/callback`
+
+3. Create your env file:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Install dependencies:
+4. Set access control (required):
+
+- Set `ALLOWED_EMAILS` (comma-separated) and/or `ALLOWED_GOOGLE_DOMAINS`
+
+5. Install dependencies:
 
 ```bash
 python -m venv .venv
@@ -26,14 +34,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Run the server:
+6. Run the server:
 
 ```bash
 uvicorn main:app --reload
 ```
 
 Then open:
-- `http://localhost:8000/meta-auth`
+- `http://localhost:8000/` (you’ll be redirected to Google login)
 
 ## Google Secret Manager auth (local)
 
@@ -56,6 +64,10 @@ gcloud run deploy tokenmeta \
 2. Set environment variables on the service (at least):
 
 - `META_REDIRECT_URI` (must match the Cloud Run URL + `/meta-auth/callback`)
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `ALLOWED_EMAILS` and/or `ALLOWED_GOOGLE_DOMAINS`
+- `SESSION_SECRET_KEY` (set a stable value)
 
 `META_APP_ID` and `META_APP_SECRET` are read directly from Google Secret Manager at runtime:
 

@@ -7,7 +7,7 @@ import secrets
 import time
 import urllib.parse
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple
  
 import httpx
 from google.api_core import exceptions as gcp_exceptions
@@ -98,6 +98,13 @@ class Settings:
     gcp_service_account_file: Optional[str]
  
     state_ttl_seconds: int
+
+    google_client_id: Optional[str]
+    google_client_secret: Optional[str]
+    google_scopes: str
+    allowed_emails: Set[str]
+    allowed_domains: Set[str]
+    session_secret_key: str
  
     @classmethod
     def from_env(cls) -> "Settings":
@@ -118,6 +125,19 @@ class Settings:
  
         state_ttl_seconds = int(os.getenv("STATE_TTL_SECONDS", "600"))
  
+        google_client_id = os.getenv("GOOGLE_CLIENT_ID") or None
+        google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or None
+        google_scopes = os.getenv("GOOGLE_SCOPES", "openid email profile")
+
+        allowed_emails_raw = os.getenv("ALLOWED_EMAILS", "")
+        allowed_domains_raw = os.getenv("ALLOWED_GOOGLE_DOMAINS", "")
+        allowed_emails = {e.strip().lower() for e in allowed_emails_raw.split(",") if e.strip()}
+        allowed_domains = {d.strip().lower() for d in allowed_domains_raw.split(",") if d.strip()}
+
+        # Used by Starlette SessionMiddleware. Required for stable sessions in prod.
+        session_secret_key = os.getenv("SESSION_SECRET_KEY") or secrets.token_urlsafe(32)
+
+
         # Load Meta app credentials from Secret Manager (NOT from .env).
         client = _get_secret_manager_client(gcp_service_account_file)
         meta_app_id = None
@@ -153,7 +173,29 @@ class Settings:
             gsm_secret_version=gsm_secret_version,
             gcp_service_account_file=gcp_service_account_file,
             state_ttl_seconds=state_ttl_seconds,
+            google_client_id=google_client_id,
+            google_client_secret=google_client_secret,
+            google_scopes=google_scopes,
+            allowed_emails=allowed_emails,
+            allowed_domains=allowed_domains,
+            session_secret_key=session_secret_key,
         )
+
+
+def is_email_allowed(settings: Settings, email: str) -> bool:
+    email_l = (email or "").strip().lower()
+    if not email_l:
+        return False
+    if not settings.allowed_emails and not settings.allowed_domains:
+        # Default-safe: if no allowlist is configured, deny access.
+        return False
+    if email_l in settings.allowed_emails:
+        return True
+    if "@" in email_l:
+        domain = email_l.split("@", 1)[1]
+        if domain in settings.allowed_domains:
+            return True
+    return False
  
  
 def build_meta_oauth_dialog_url(settings: Settings, *, state: str) -> str:

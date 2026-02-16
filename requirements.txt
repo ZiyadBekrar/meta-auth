@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 httpx
 google-cloud-secret-manager
+authlib
+itsdangerous
