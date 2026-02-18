@@ -1,4 +1,5 @@
 import os
+import json
 import urllib.parse
 from typing import Optional
 
@@ -276,7 +277,7 @@ async def meta_auth_callback(
         long_user_access_token = await exchange_code_for_long_lived_user_access_token(
             settings, code=code
         )
-        page_access_token = await exchange_user_token_for_page_access_token(
+        pages_payload = await exchange_user_token_for_page_access_token(
             settings,
             user_access_token=long_user_access_token,
         )
@@ -295,7 +296,7 @@ async def meta_auth_callback(
         )
 
     updated, message = upload_to_google_secret_manager_if_changed(
-        token=page_access_token,
+        token=json.dumps(pages_payload, ensure_ascii=True),
         secret_version=settings.gsm_secret_version,
         service_account_file=settings.gcp_service_account_file,
     )

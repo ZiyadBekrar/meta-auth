@@ -301,60 +301,61 @@ async def exchange_code_for_long_lived_user_access_token(settings: Settings, *, 
         return long_token
 
 
-async def exchange_user_token_for_page_access_token(settings: Settings, *, user_access_token: str) -> str:
+async def exchange_user_token_for_page_access_token(settings: Settings, *, user_access_token: str) -> dict:
     """
-    Uses `/me/accounts` to retrieve a page access token.
+    Uses `/me/accounts` to retrieve all managed pages and their page access tokens.
 
-    - If META_PAGE_ID is set, selects that page.
-    - If META_PAGE_ID is not set and exactly one page is available, selects it.
-    - Otherwise raises a ValueError asking to set META_PAGE_ID.
+    Returns the full JSON payload shape:
+    {
+      "data": [... all pages across pagination ...],
+      "paging": {... last paging object if present ...}
+    }
     """
     if not user_access_token:
-        raise ValueError("Missing user access token; cannot fetch page access token.")
+        raise ValueError("Missing user access token; cannot fetch page accounts payload.")
 
-    url = f"https://graph.facebook.com/{settings.meta_api_version}/me/accounts"
+    base_url = f"https://graph.facebook.com/{settings.meta_api_version}/me/accounts"
+    fields = "id,name,access_token,category,category_list,tasks"
+    cursor_after: Optional[str] = None
+    all_pages = []
+    last_paging = None
+
     async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.get(
-            url,
-            params={
+        while True:
+            params = {
                 "access_token": user_access_token,
-                "fields": "id,name,access_token",
-            },
-        )
+                "fields": fields,
+                "limit": 100,
+            }
+            if cursor_after:
+                params["after"] = cursor_after
 
-    if resp.status_code >= 400:
-        raise ValueError(f"Meta page token retrieval failed: {resp.status_code} {resp.text}")
+            resp = await client.get(base_url, params=params)
+            if resp.status_code >= 400:
+                raise ValueError(f"Meta page accounts retrieval failed: {resp.status_code} {resp.text}")
 
-    payload = resp.json()
-    pages = payload.get("data") or []
-    if not pages:
+            payload = resp.json()
+            page_chunk = payload.get("data") or []
+            all_pages.extend(page_chunk)
+            last_paging = payload.get("paging")
+
+            cursor_after = (
+                (payload.get("paging") or {})
+                .get("cursors", {})
+                .get("after")
+            )
+            if not cursor_after:
+                break
+
+    if not all_pages:
         raise ValueError(
             "No pages found for this user. Ensure your app has required page scopes and the user has page access."
         )
 
-    if settings.meta_page_id:
-        for page in pages:
-            if str(page.get("id")) == str(settings.meta_page_id):
-                page_token = page.get("access_token")
-                if not page_token:
-                    raise ValueError(f"Page {settings.meta_page_id} found but no access_token was returned.")
-                return page_token
-        available = ", ".join(str(p.get("id")) for p in pages if p.get("id"))
-        raise ValueError(
-            f"META_PAGE_ID={settings.meta_page_id} not found in /me/accounts. Available page ids: {available}"
-        )
-
-    if len(pages) == 1:
-        page_token = pages[0].get("access_token")
-        if not page_token:
-            raise ValueError("Single page found but no access_token was returned.")
-        return page_token
-
-    available = ", ".join(f"{p.get('name', 'unknown')}({p.get('id', '?')})" for p in pages)
-    raise ValueError(
-        "Multiple pages found. Set META_PAGE_ID to choose one page. "
-        f"Available pages: {available}"
-    )
+    result = {"data": all_pages}
+    if last_paging:
+        result["paging"] = last_paging
+    return result
  
  
 def upload_to_google_secret_manager_if_changed(
